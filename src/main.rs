@@ -1,57 +1,27 @@
-use std::{
-    collections::HashMap,
-    env,
-    io::Error as IoError,
-    net::SocketAddr,
-    sync::{Arc, Mutex},
-};
+use std::{collections::HashMap, env, io::Error as IoError, net::SocketAddr, sync::Arc};
 
-use futures::{
-    channel::mpsc::{unbounded, UnboundedSender},
-    SinkExt,
-};
+use futures::lock::Mutex;
+use futures::{channel::mpsc::unbounded, SinkExt};
 use futures::{future, pin_mut, stream::TryStreamExt, StreamExt};
 
-use serde::{Deserialize, Serialize};
-use serde_json::Result;
+mod drum_circle;
+use crate::drum_circle::{CircleId, CircleMember, DrumCircle, UserId};
+
+mod message;
+use crate::message::{deserialize, serialize, WSPayload};
+
 use tokio::net::{TcpListener, TcpStream};
-use tokio_tungstenite::tungstenite::protocol::Message;
 
 use uuid::Uuid;
-
-type Tx = UnboundedSender<Message>;
-type UserId = String;
-type CircleId = String;
-struct CircleMember {
-    id: UserId,
-    tx: Tx,
-}
-type DrumCircle = HashMap<UserId, CircleMember>;
 type WorldOfCircles = Arc<Mutex<HashMap<CircleId, DrumCircle>>>;
 type NextCircleId = Arc<Mutex<u32>>;
-
-#[derive(Serialize, Deserialize)]
-struct SDPOffer {
-    user_id: UserId,
-    sdp: String,
-}
-
-#[derive(Serialize, Deserialize, Default)]
-struct WSPayload {
-    name: String,
-    member_id: UserId,
-    circle_id: Option<CircleId>,
-    members: Option<Vec<String>>,
-    sdps: Option<Vec<SDPOffer>>,
-    sdp: String,
-}
 
 async fn handle_connection(
     world: WorldOfCircles,
     next_circle_id: NextCircleId,
     raw_stream: TcpStream,
     addr: SocketAddr,
-) {
+) -> Result<(), tokio_tungstenite::tungstenite::Error> {
     println!("Incoming TCP connection from: {}", addr);
 
     let ws_stream = tokio_tungstenite::accept_async(raw_stream)
@@ -59,74 +29,89 @@ async fn handle_connection(
         .expect("Error during the websocket handshake occurred");
     println!("WebSocket connection established: {}", addr);
 
-    let (tx, rx) = unbounded();
+    let (outgoing, mut incoming) = ws_stream.split();
 
     let user = CircleMember {
         id: Uuid::new_v4().to_string(),
-        tx,
+        stream: outgoing,
     };
+    let user_wrapper = Arc::new(Mutex::new(user));
 
-    let (outgoing, incoming) = ws_stream.split();
+    let user_ptr = user_wrapper.clone();
+    while let Some(msg) = incoming.next().await {
+        let msg = msg?;
+        if msg.is_text() || msg.is_binary() {
+            let m = deserialize(msg.to_text()?);
 
-    let broadcast_incoming = incoming.try_for_each(|msg| {
-        let message = msg.to_text().unwrap();
+            match m.name.as_ref() {
+                "new_circle" => {
+                    println!("Making a new circle");
+                    // create a drum circle, send response payload back
+                    let mut user = user_ptr.lock().await;
+                    let mut circle_idx = next_circle_id.lock().await;
+                    let circle_id = circle_idx.to_string();
+                    let mut circle = DrumCircle::new();
 
-        println!("Received a message from {}: {}", addr, message);
-        let m: WSPayload = serde_json::from_str(message);
+                    *circle_idx += 1;
 
-        match m.name.as_ref() {
-            "new_circle" => {
-                // create a drum circle, send response payload back
-                let circle_idx = next_circle_id.lock().unwrap();
-                let circle_id = circle_idx.to_string();
-                let circle = DrumCircle::new();
+                    circle.insert(user.id.clone(), user_ptr.clone());
+                    world.lock().await.insert(circle_id.clone(), circle);
 
-                circle.insert(user.id, user);
-                world.lock().unwrap().insert(circle_id, circle);
+                    let response = WSPayload {
+                        name: "circle_created".to_string(),
+                        circle_id: circle_id.into(),
+                        ..WSPayload::default()
+                    };
 
-                let response = serde_json::to_string(&WSPayload {
-                    name: "circle_created".to_string(),
-                    circle_id: circle_id.into(),
-                    ..WSPayload::default()
-                })?;
+                    user.stream.send(serialize(response)).await?;
+                }
+                "join_circle" => {
+                    // find drum circle, send membership list response back
+                    let circle_id = m.circle_id.unwrap();
+                    println!("Joining circle {}", circle_id);
+                    let circle = world.lock().await.get(&circle_id).unwrap();
 
-                outgoing.send(response.into());
+		    // gah i don't know rust
+                    let members: Vec<UserId> = new vec[0];
+                    for key in circle.keys() {
+                        members.push(key.clone());
+                    }
 
-                circle_idx += 1;
-            }
-            "join_circle" => {
-                // find drum circle, send membership list response back
-            }
-            "circle_join_offers" => {
-                // find drum circle, forward SDP offer to each member by ID
-                // let peers = peer_map.lock().unwrap();
+                    let response = WSPayload {
+                        members: circle.keys().cloned().collect::<Vec<String>>(),
+                        name: "circle_discovery".to_string(),
+                        circle_id: circle_id.into(),
+                        ..WSPayload::default()
+                    };
+                }
+                "circle_join_offers" => {
+                    // find drum circle, forward SDP offer to each member by ID
+                    // let peers = peer_map.lock().unwrap();
 
-                // // We want to broadcast the message to everyone except ourselves.
-                // let broadcast_recipients = peers
-                //     .iter()
-                //     .filter(|(peer_addr, _)| peer_addr != &&addr)
-                //     .map(|(_, ws_sink)| ws_sink);
+                    // // We want to broadcast the message to everyone except ourselves.
+                    // let broadcast_recipients = peers
+                    //     .iter()
+                    //     .filter(|(peer_addr, _)| peer_addr != &&addr)
+                    //     .map(|(_, ws_sink)| ws_sink);
 
-                // for recp in broadcast_recipients {
-                //     recp.unbounded_send(msg.clone()).unwrap();
-                // }
-            }
-            "new_member_rtc_answer" => {
-                // find circle and member and forward SDP answer
+                    // for recp in broadcast_recipients {
+                    //     recp.unbounded_send(msg.clone()).unwrap();
+                    // }
+                }
+                "new_member_rtc_answer" => {
+                    // find circle and member and forward SDP answer
+                }
+                _ => {
+                    println!("Unexpected message name: {}", m.name);
+                }
             }
         }
-
-        future::ok(())
-    });
-
-    let receive_from_others = rx.map(Ok).forward(outgoing);
-
-    pin_mut!(broadcast_incoming, receive_from_others);
-    future::select(broadcast_incoming, receive_from_others).await;
+    }
 
     println!("{} disconnected", &addr);
     // TODO: Remove member from their circle
     // peer_map.lock().unwrap().remove(&addr);
+    Ok(())
 }
 
 #[tokio::main]

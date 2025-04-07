@@ -56,7 +56,7 @@
 	"sdp": ...base64-encoded SDP JSON...
 }
 ```
-- New member RTC answer (Client -> Server)
+- New member RTC answer (Client -> Server + Forwarded to joiner client)
 ```json
 {
 	"name": "new_member_rtc_answer",
