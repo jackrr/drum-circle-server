@@ -37,7 +37,7 @@ async fn handle_connection(
     };
     let user_wrapper = Arc::new(Mutex::new(user));
 
-    let user_ptr = user_wrapper.clone();
+    let user_mtx = user_wrapper.clone();
     while let Some(msg) = incoming.next().await {
         let msg = msg?;
         if msg.is_text() || msg.is_binary() {
@@ -47,14 +47,14 @@ async fn handle_connection(
                 "new_circle" => {
                     println!("Making a new circle");
                     // create a drum circle, send response payload back
-                    let mut user = user_ptr.lock().await;
+                    let mut user = user_mtx.lock().await;
                     let mut circle_idx = next_circle_id.lock().await;
                     let circle_id = circle_idx.to_string();
                     let mut circle = DrumCircle::new();
 
                     *circle_idx += 1;
 
-                    circle.insert(user.id.clone(), user_ptr.clone());
+                    circle.insert(user.id.clone(), user_mtx.clone());
                     world.lock().await.insert(circle_id.clone(), circle);
 
                     let response = WSPayload {
@@ -67,39 +67,42 @@ async fn handle_connection(
                 }
                 "join_circle" => {
                     // find drum circle, send membership list response back
+                    let mut user = user_mtx.lock().await;
                     let circle_id = m.circle_id.unwrap();
                     println!("Joining circle {}", circle_id);
-                    let circle = world.lock().await.get(&circle_id).unwrap();
+                    let world = world.lock().await;
+                    let circle = world.get(&circle_id).unwrap();
 
-		    // gah i don't know rust
-                    let members: Vec<UserId> = new vec[0];
+                    // TODO: less clunky way to get a vec of strings of user ids?
+                    let mut members: Vec<UserId> = Vec::new();
                     for key in circle.keys() {
                         members.push(key.clone());
                     }
 
                     let response = WSPayload {
-                        members: circle.keys().cloned().collect::<Vec<String>>(),
+                        members: members.into(),
                         name: "circle_discovery".to_string(),
                         circle_id: circle_id.into(),
                         ..WSPayload::default()
                     };
-                }
-                "circle_join_offers" => {
-                    // find drum circle, forward SDP offer to each member by ID
-                    // let peers = peer_map.lock().unwrap();
 
-                    // // We want to broadcast the message to everyone except ourselves.
-                    // let broadcast_recipients = peers
-                    //     .iter()
-                    //     .filter(|(peer_addr, _)| peer_addr != &&addr)
-                    //     .map(|(_, ws_sink)| ws_sink);
-
-                    // for recp in broadcast_recipients {
-                    //     recp.unbounded_send(msg.clone()).unwrap();
-                    // }
+                    user.stream.send(serialize(response)).await?;
                 }
-                "new_member_rtc_answer" => {
-                    // find circle and member and forward SDP answer
+                "new_member_rtc_offer" | "new_member_rtc_answer" => {
+                    println!("Got message: {:?}", m);
+                    let user = user_mtx.lock().await;
+                    let circle_id = m.circle_id.clone().unwrap();
+                    let world = world.lock().await;
+                    let circle = world.get(&circle_id).unwrap();
+                    let peer_id = m.member_id.clone().unwrap();
+                    let mut peer = circle.get(&peer_id).unwrap().lock().await;
+
+                    // Forward original payload, swapping originator's id for dest id
+                    let response = WSPayload {
+                        member_id: user.id.clone().into(),
+                        ..m
+                    };
+                    peer.stream.send(serialize(response)).await?;
                 }
                 _ => {
                     println!("Unexpected message name: {}", m.name);

@@ -5,13 +5,13 @@ use crate::drum_circle::{CircleId, UserId};
 
 type SDP = String;
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct SDPOffer {
     user_id: UserId,
     sdp: SDP,
 }
 
-#[derive(Serialize, Deserialize, Default)]
+#[derive(Serialize, Deserialize, Default, Debug)]
 pub struct WSPayload {
     pub name: String,
     pub member_id: Option<UserId>,
