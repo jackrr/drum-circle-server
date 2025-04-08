@@ -4,6 +4,7 @@ use tokio_tungstenite::tungstenite::protocol::Message;
 use crate::drum_circle::{CircleId, DrummerId};
 
 type SDP = String;
+type ICE = String;
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct SDPOffer {
@@ -19,6 +20,7 @@ pub struct WSPayload {
     pub members: Option<Vec<String>>,
     pub sdps: Option<Vec<SDPOffer>>,
     pub sdp: Option<SDP>,
+    pub ice: Option<ICE>
 }
 
 // pub type ParsedPayload = Result<WSPayload>;
