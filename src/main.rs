@@ -70,14 +70,16 @@ async fn handle_connection(
                     let mut user = user_mtx.lock().await;
                     let circle_id = m.circle_id.unwrap();
                     println!("Joining circle {}", circle_id);
-                    let world = world.lock().await;
-                    let circle = world.get(&circle_id).unwrap();
+                    let mut world = world.lock().await;
+                    let circle = world.get_mut(&circle_id).unwrap();
 
                     // TODO: less clunky way to get a vec of strings of user ids?
                     let mut members: Vec<UserId> = Vec::new();
                     for key in circle.keys() {
                         members.push(key.clone());
                     }
+
+                    circle.insert(user.id.clone(), user_mtx.clone());
 
                     let response = WSPayload {
                         members: members.into(),
@@ -95,6 +97,7 @@ async fn handle_connection(
                     let world = world.lock().await;
                     let circle = world.get(&circle_id).unwrap();
                     let peer_id = m.member_id.clone().unwrap();
+                    println!("Peer id is {}", peer_id);
                     let mut peer = circle.get(&peer_id).unwrap().lock().await;
 
                     // Forward original payload, swapping originator's id for dest id
