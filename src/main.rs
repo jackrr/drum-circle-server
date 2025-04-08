@@ -107,6 +107,23 @@ async fn handle_connection(
                     };
                     peer.stream.send(serialize(response)).await?;
                 }
+                "ice_candidate" => { 
+                    println!("Got message: {:?}", m);
+                    let circle_id = m.circle_id.clone().unwrap();
+                    let mut world = world.lock().await;
+                    let circle = world.get_mut(&circle_id).unwrap();
+                    let broadcasting_drummer_id = m.member_id.clone().unwrap();
+                    println!("Peer broadcasting is {}", broadcasting_drummer_id);
+
+                    // broadcast to all the other drummers
+                    for (drummer_id, drummer) in circle.iter_mut() {
+                        if *drummer_id == broadcasting_drummer_id {
+                            continue;
+                        }
+
+                        drummer.lock().await.stream.send(msg.clone()).await?;
+                    }                    
+                }
                 _ => {
                     println!("Unexpected message name: {}", m.name);
                 }
