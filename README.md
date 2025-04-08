@@ -6,7 +6,6 @@
 ### V0
 
 - Generate short unique id for users and circles (autoincrement to start?)
-- 
 
 ## Contracts
 
@@ -54,5 +53,14 @@
 	"circle_id": "abc123",
 	"member_id": "user123", // ID of joiner
 	"sdp": ...base64-encoded SDP JSON...
+}
+```
+- ICE candidate broadcast
+```json
+{
+    "name": "ice_candidate",
+    "circle_id": "abc123",
+    "member_id": "user123", // ID of ICE owner
+    "ice": ...ice JSON...
 }
 ```

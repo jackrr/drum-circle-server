@@ -1,20 +1,20 @@
 use serde::{Deserialize, Serialize};
 use tokio_tungstenite::tungstenite::protocol::Message;
 
-use crate::drum_circle::{CircleId, UserId};
+use crate::drum_circle::{CircleId, DrummerId};
 
 type SDP = String;
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct SDPOffer {
-    user_id: UserId,
+    user_id: DrummerId,
     sdp: SDP,
 }
 
 #[derive(Serialize, Deserialize, Default, Debug)]
 pub struct WSPayload {
     pub name: String,
-    pub member_id: Option<UserId>,
+    pub member_id: Option<DrummerId>,
     pub circle_id: Option<CircleId>,
     pub members: Option<Vec<String>>,
     pub sdps: Option<Vec<SDPOffer>>,

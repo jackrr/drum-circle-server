@@ -1,14 +1,14 @@
 use std::{collections::HashMap, env, io::Error as IoError, net::SocketAddr, sync::Arc};
 
+use futures::SinkExt;
+use futures::StreamExt;
 use futures::lock::Mutex;
-use futures::{channel::mpsc::unbounded, SinkExt};
-use futures::{future, pin_mut, stream::TryStreamExt, StreamExt};
 
 mod drum_circle;
-use crate::drum_circle::{CircleId, CircleMember, DrumCircle, UserId};
+use crate::drum_circle::{CircleId, Drummer, DrumCircle, DrummerId};
 
 mod message;
-use crate::message::{deserialize, serialize, WSPayload};
+use crate::message::{WSPayload, deserialize, serialize};
 
 use tokio::net::{TcpListener, TcpStream};
 
@@ -31,7 +31,7 @@ async fn handle_connection(
 
     let (outgoing, mut incoming) = ws_stream.split();
 
-    let user = CircleMember {
+    let user = Drummer {
         id: Uuid::new_v4().to_string(),
         stream: outgoing,
     };
@@ -74,7 +74,7 @@ async fn handle_connection(
                     let circle = world.get_mut(&circle_id).unwrap();
 
                     // TODO: less clunky way to get a vec of strings of user ids?
-                    let mut members: Vec<UserId> = Vec::new();
+                    let mut members: Vec<DrummerId> = Vec::new();
                     for key in circle.keys() {
                         members.push(key.clone());
                     }
