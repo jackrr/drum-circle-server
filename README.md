@@ -55,12 +55,12 @@
 	"sdp": ...base64-encoded SDP JSON...
 }
 ```
-- ICE candidate broadcast
+- ICE Candidate Broadcast (Client -> Server -> Clients)
 ```json
 {
-    "name": "ice_candidate",
-    "circle_id": "abc123",
-    "member_id": "user123", // ID of ICE owner
-    "ice": ...ice JSON...
+	"name": "ice_candidate",
+	"circle_id": "abc123",
+	"member_id": "user123", // ID of ICE owner
+	"ice": ...ice JSON...
 }
 ```
