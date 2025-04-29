@@ -1,13 +1,27 @@
-
 # Drum Circle (Server)
 
-## Todo
+Rust server supporting the [drum circle client app](https://github.com/jackrr/drum-circle-app).
 
-### V0
+## Dev setup
 
-- Generate short unique id for users and circles (autoincrement to start?)
+1. Clone this repo.
 
-## Contracts
+1. Ensure you have rust installed on your system.
+
+1. Start the server (this command will install any dependencies and compile)
+
+```bash
+cargo run
+```
+
+## Contributing
+
+See the [Issues](https://github.com/jackrr/drum-circle-app/issues) tab
+to find proposed features and known issues. You are welcome to suggest
+a solution on one of those, put up a PR, or open a new issue to
+suggest additional changes!
+
+## API Contracts
 
 - Create Circle (Client -> Server)
 ```json
